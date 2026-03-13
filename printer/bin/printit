@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# rps – Run Python Script
+# -----------------------
+# Convenience wrapper that executes a Python script from the skill's
+# "scripts/" directory using "uv run --project", forwarding all additional
+# arguments. Dependencies are managed via "uv sync" and pyproject.toml.
+#
+# Usage:
+#   printit <script_name> [args...]
+#
+# Examples:
+#   printit list_printers
+#   printit list_printers --verbose
+#   printit print_file --file ~/report.pdf --duplex
+#   printit print_url --url https://example.com --landscape --scale 0.8
+#   printit print_text --file notes.txt --font Helvetica --font-size 11
+#
+# The script name may be given with or without the .py extension.
+# Run "uv sync" in the skill root once before using rps to install
+# all dependencies. "uv" must be on PATH (https://github.com/astral-sh/uv).
+
+set -euo pipefail
+
+# ── Resolve skill root (one level above this script's directory) ──────────────
+SKILL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPTS_DIR="${SKILL_ROOT}/scripts"
+
+# ── Validate arguments ────────────────────────────────────────────────────────
+if [[ $# -lt 1 ]]; then
+    echo "Usage: rps <script_name> [args...]" >&2
+    echo ""                                    >&2
+    echo "Available scripts:"                  >&2
+    for f in "${SCRIPTS_DIR}"/*.py; do
+        echo "  $(basename "${f%.py}")"        >&2
+    done
+    exit 1
+fi
+
+# ── Resolve script name (add .py if missing) ──────────────────────────────────
+SCRIPT_NAME="$1"
+shift   # remaining args are forwarded to the Python script
+
+if [[ "${SCRIPT_NAME}" != *.py ]]; then
+    SCRIPT_NAME="${SCRIPT_NAME}.py"
+fi
+
+SCRIPT_PATH="${SCRIPTS_DIR}/${SCRIPT_NAME}"
+
+if [[ ! -f "${SCRIPT_PATH}" ]]; then
+    echo "Error: Script not found: ${SCRIPT_PATH}" >&2
+    echo ""                                         >&2
+    echo "Available scripts:"                       >&2
+    for f in "${SCRIPTS_DIR}"/*.py; do
+        echo "  $(basename "${f%.py}")"             >&2
+    done
+    exit 1
+fi
+
+# ── Check uv is available ─────────────────────────────────────────────────────
+if ! command -v uv &>/dev/null; then
+    echo "Error: 'uv' is not installed or not on PATH." >&2
+    echo "Install it with:"                             >&2
+    echo "  curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+    exit 1
+fi
+
+# ── Run the script via uv ─────────────────────────────────────────────────────
+# --project points uv to the skill root where pyproject.toml lives.
+# Run "uv sync" once in the skill root to install all dependencies first.
+exec uv run \
+    --project "${SKILL_ROOT}" --directory "${SKILL_ROOT}" \
+    "${SCRIPT_PATH}" \
+    "$@"
