@@ -20,7 +20,6 @@ If you detect more then one printer, ask the user which printer ist the default 
 ```bash
 # JSON output (default) — machine-readable, use this when parsing results
 {baseDir}/bin/printer list
-{baseDir}/bin/printer list --json
 
 # Text table — human-readable
 {baseDir}/bin/printer list --text

@@ -34,7 +34,6 @@ bin/printer <command> [options]
 ```bash
 # JSON output (default)
 bin/printer list
-bin/printer list --json
 
 # Human-readable text table
 bin/printer list --text
