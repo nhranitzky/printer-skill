@@ -32,7 +32,7 @@ echo ""
 echo "==> Installing dependencies..."
 uv sync --no-dev --project "$SKILL_ROOT"
 uv run --project "$SKILL_ROOT" playwright install chromium
-chmod +x "$SKILL_ROOT/bin/printit"
+chmod +x "$SKILL_ROOT/bin/printer"
 echo "    Done."
 
 # ---------------------------------------------------------------------------
@@ -47,7 +47,7 @@ if ask "==> Add bin/printit to the Openclaw approvals allowlist?"; then
     read -rp "    Agent name (or * for all agents): " AGENT_INPUT
     AGENT="${AGENT_INPUT:-*}"
 
-    openclaw approvals allowlist add --agent "$AGENT" "**/printer/bin/printit"
+    openclaw approvals allowlist add --agent "$AGENT" "**/printer/bin/printer"
     echo "    Allowlist entry added for agent: $AGENT"
 else
     echo "    Skipping allowlist setup."

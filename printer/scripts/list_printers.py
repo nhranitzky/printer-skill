@@ -15,9 +15,10 @@ Output:
     it is the system default printer.
 """
 
-import argparse
 import json
 import sys
+
+import click
 
 try:
     import cups
@@ -132,52 +133,31 @@ def list_printers_text(conn: cups.Connection, verbose: bool = False) -> None:
     print()
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="List all CUPS printers available on this system / network.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__,
-    )
-    parser.add_argument(
-        "--verbose", "-v",
-        action="store_true",
-        help="Include all CUPS attributes for each printer.",
-    )
-
-    fmt_group = parser.add_mutually_exclusive_group()
-    fmt_group.add_argument(
-        "--json",
-        action="store_true",
-        default=True,
-        help="Output as JSON (default).",
-    )
-    fmt_group.add_argument(
-        "--text",
-        action="store_true",
-        help="Output as a human-readable text table.",
-    )
-
-    args = parser.parse_args()
-
+@click.command("list-printers")
+@click.option("--verbose", "-v", is_flag=True, default=False,
+              help="Include all CUPS attributes for each printer.")
+@click.option("--text", is_flag=True, default=False,
+              help="Output as a human-readable text table (default: JSON).")
+def list_printers_cmd(verbose: bool, text: bool) -> None:
+    """List all CUPS printers available on this system / network."""
     try:
         conn = cups.Connection()
     except RuntimeError as exc:
-        print(f"Error: Could not connect to CUPS. Is CUPS running?\nDetails: {exc}", file=sys.stderr)
-        sys.exit(1)
+        raise click.ClickException(f"Could not connect to CUPS. Is CUPS running?\nDetails: {exc}")
 
     if not conn.getPrinters():
-        if args.text:
-            print("No printers found. Make sure CUPS is running and printers are configured.")
-            print("You can add printers via http://localhost:631 or the `lpadmin` command.")
+        if text:
+            click.echo("No printers found. Make sure CUPS is running and printers are configured.")
+            click.echo("You can add printers via http://localhost:631 or the `lpadmin` command.")
         else:
-            print(json.dumps({"total": 0, "default_printer": None, "printers": []}, indent=2))
+            click.echo(json.dumps({"total": 0, "default_printer": None, "printers": []}, indent=2))
         return
 
-    if args.text:
-        list_printers_text(conn, verbose=args.verbose)
+    if text:
+        list_printers_text(conn, verbose=verbose)
     else:
-        list_printers_json(conn, verbose=args.verbose)
+        list_printers_json(conn, verbose=verbose)
 
 
 if __name__ == "__main__":
-    main()
+    list_printers_cmd()

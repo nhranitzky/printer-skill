@@ -20,8 +20,8 @@ bash setup/setup-openclaw.sh
 The script performs the following steps:
 
 1. **Check CUPS** — verifies that CUPS is installed and running. Exits with install instructions if not found.
-2. **Install dependencies** — runs `uv sync --no-dev`, installs Chromium via Playwright, and makes `bin/printit` executable.
-3. **Allowlist** — offers to add `bin/printit` to the Openclaw approvals allowlist. You can restrict the entry to a specific agent name or use `*` for all agents.
+2. **Install dependencies** — runs `uv sync --no-dev`, installs Chromium via Playwright, and makes `bin/printer` executable.
+3. **Allowlist** — offers to add `bin/printer` to the Openclaw approvals allowlist. You can restrict the entry to a specific agent name or use `*` for all agents.
 
 ---
 
@@ -45,7 +45,7 @@ bash setup/setup-claude.sh
 The script performs the following steps:
 
 1. **Check CUPS** — verifies that CUPS is installed and running. Exits with install instructions if not found.
-2. **Install dependencies** — runs `uv sync --no-dev`, installs Chromium via Playwright, and makes `bin/printit` executable.
+2. **Install dependencies** — runs `uv sync --no-dev`, installs Chromium via Playwright, and makes `bin/printer` executable.
 3. **Patch `SKILL.md` for Claude Code** — removes the `{baseDir}/` path prefix from all commands and strips Openclaw-only frontmatter fields (`licence`, `metadata`).
 
 ---

@@ -17,17 +17,17 @@ Usage:
     python print_file.py --help
 
 Environment variables (via .env file in the script directory):
-    DEFAULT_PRINTER   Name of the CUPS printer to use when --printer is not given.
     DEFAULT_DUPLEX    "true" or "false" – whether to default to duplex printing.
 
 Requirements:
     pip install pycups python-dotenv
 """
 
-import argparse
 import os
 import sys
 from pathlib import Path
+
+import click
 
 # ── Load .env from the script's own directory ─────────────────────────────────
 _SKILL_ROOT  = Path(__file__).parent.parent.resolve()
@@ -141,106 +141,42 @@ def print_file(
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
-def main() -> None:
-    # Read environment defaults for help text
-    env_printer = os.getenv("DEFAULT_PRINTER", "not set")
-    env_duplex  = os.getenv("DEFAULT_DUPLEX",  "false")
+@click.command("print-file")
+@click.option("--file", "-f", required=True, metavar="PATH",
+              help="Path to the file to print (e.g. /home/user/report.pdf).")
+@click.option("--printer", "-p", default=None, metavar="NAME",
+              help="CUPS printer name. Run 'printer list' to see available names.")
+@click.option("--duplex", "-d", is_flag=True, default=False,
+              help="Print two-sided (duplex, long-edge binding).")
+@click.option("--simplex", "-s", is_flag=True, default=False,
+              help="Print one-sided (simplex). Overrides DEFAULT_DUPLEX=true in .env.")
+@click.option("--copies", "-n", type=int, default=1, metavar="N",
+              help="Number of copies to print (default: 1).")
+@click.option("--title", "-t", default=None, metavar="TITLE",
+              help="Job title shown in the CUPS queue (default: filename).")
+@click.option("--media", "-m", default=None, metavar="SIZE",
+              help='Paper size, e.g. "A4" or "Letter" (default: printer default).')
+@click.option("--orientation", "-o", type=click.Choice(["portrait", "landscape"]),
+              default=None, help="Page orientation (default: printer default).")
+def print_file_cmd(file, printer, duplex, simplex, copies, title, media, orientation) -> None:
+    """Print a file via CUPS with configurable options."""
+    if duplex and simplex:
+        raise click.UsageError("--duplex and --simplex are mutually exclusive")
+    if copies < 1:
+        raise click.BadParameter("must be at least 1", param_hint="'--copies'")
 
-    parser = argparse.ArgumentParser(
-        description="Print a file via CUPS with configurable options.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=(
-            f"Current .env defaults (from {_DOTENV_PATH}):\n"
-            f"  DEFAULT_PRINTER = {env_printer}\n"
-            f"  DEFAULT_DUPLEX  = {env_duplex}\n\n"
-            "Examples:\n"
-            "  python print_file.py --file report.pdf\n"
-            "  python print_file.py --file report.pdf --duplex\n"
-            "  python print_file.py --file report.pdf --printer HP_LaserJet --copies 2\n"
-        ),
-    )
-
-    parser.add_argument(
-        "--file", "-f",
-        required=True,
-        metavar="PATH",
-        help="Path to the file to print (e.g. /home/user/report.pdf).",
-    )
-    parser.add_argument(
-        "--printer", "-p",
-        default=None,
-        metavar="NAME",
-        help=(
-            "CUPS printer name to use. Overrides DEFAULT_PRINTER from .env. "
-            "Run list_printers.py to see available names."
-        ),
-    )
-
-    # Mutually exclusive duplex / simplex flags
-    sides_group = parser.add_mutually_exclusive_group()
-    sides_group.add_argument(
-        "--duplex", "-d",
-        action="store_true",
-        default=None,
-        help="Print two-sided (duplex, long-edge binding).",
-    )
-    sides_group.add_argument(
-        "--simplex", "-s",
-        action="store_true",
-        default=None,
-        help="Print one-sided (simplex). Overrides DEFAULT_DUPLEX=true in .env.",
-    )
-
-    parser.add_argument(
-        "--copies", "-n",
-        type=int,
-        default=1,
-        metavar="N",
-        help="Number of copies to print (default: 1).",
-    )
-    parser.add_argument(
-        "--title", "-t",
-        default=None,
-        metavar="TITLE",
-        help="Job title shown in the CUPS queue (default: filename).",
-    )
-    parser.add_argument(
-        "--media", "-m",
-        default=None,
-        metavar="SIZE",
-        help='Paper size, e.g. "A4" or "Letter" (default: printer default).',
-    )
-    parser.add_argument(
-        "--orientation", "-o",
-        choices=["portrait", "landscape"],
-        default=None,
-        help="Page orientation (default: printer default).",
-    )
-
-    args = parser.parse_args()
-
-    # Resolve duplex flag: --simplex forces False, --duplex forces True, else None→.env
-    if args.simplex:
-        duplex_value: bool | None = False
-    elif args.duplex:
-        duplex_value = True
-    else:
-        duplex_value = None  # will be resolved from .env inside print_file()
-
-    if args.copies < 1:
-        print("Error: --copies must be at least 1.", file=sys.stderr)
-        sys.exit(1)
+    duplex_value: bool | None = True if duplex else (False if simplex else None)
 
     print_file(
-        file_path=args.file,
-        printer_name=args.printer,
+        file_path=file,
+        printer_name=printer,
         duplex=duplex_value,
-        copies=args.copies,
-        title=args.title,
-        media=args.media,
-        orientation=args.orientation,
+        copies=copies,
+        title=title,
+        media=media,
+        orientation=orientation,
     )
 
 
 if __name__ == "__main__":
-    main()
+    print_file_cmd()

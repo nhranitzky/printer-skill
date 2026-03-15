@@ -17,22 +17,26 @@ make package          # builds: printer.skill_v1.0.zip
 # Deploy to Openclaw device
 make deploy           # scp zip to ${TARGET}:/home/pi/downloads
 
-# Run a script directly
-cd printer && uv run python scripts/list_printers.py
-cd printer && uv run python scripts/print_file.py --file /path/to/file.pdf
-cd printer && uv run python scripts/print_url.py --url https://example.com
-cd printer && uv run python scripts/print_text.py --file /path/to/file.txt
+# Run via the launcher
+cd printer && bin/printit list-printers
+cd printer && bin/printit print-file --file /path/to/file.pdf
+cd printer && bin/printit print-url --url https://example.com
+cd printer && bin/printit print-text --file /path/to/file.txt
+
+# Run main.py directly (for development)
+cd printer && uv run python scripts/main.py --help
 ```
 
 ## Architecture
 
-The skill has no `main.py` CLI group — instead, each script is a standalone argparse program invoked independently via the `bin/printit` bash launcher:
+`bin/printit` delegates to `scripts/main.py`, a Click CLI group that dispatches to four subcommands:
 
 ```
-bin/printit <script_name> [args...]
+bin/printit <command> [args...]
 ```
 
-The launcher resolves the script name from `scripts/`, then delegates to `uv run --project <skill_root> python scripts/<script_name>.py`.
+The launcher runs `uv run --project <skill_root> scripts/main.py "$@"`.
+Each subcommand is defined in its own module and registered in `main.py`.
 
 ### Scripts
 
@@ -45,6 +49,7 @@ The launcher resolves the script name from `scripts/`, then delegates to `uv run
 
 ### Dependencies
 
+- `click` — CLI framework (group + subcommand dispatch)
 - `pycups` — CUPS bindings (requires CUPS running: `lpstat -r`)
 - `playwright` — headless Chromium for URL printing (first run: `playwright install chromium`)
 - `reportlab` — PDF generation for text printing

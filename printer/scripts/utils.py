@@ -4,7 +4,6 @@ utils.py
 Shared helpers for all printer skill scripts.
 """
 
-import os
 import sys
 
 import cups
@@ -30,9 +29,8 @@ def resolve_printer(conn: cups.Connection, requested: str | None) -> str:
 
     Priority:
         1. --printer CLI argument
-        2. DEFAULT_PRINTER from .env
-        3. CUPS system default printer
-        4. First available printer (last resort)
+        2. CUPS system default printer
+        3. First available printer (last resort)
 
     Args:
         conn:       An active CUPS connection.
@@ -62,20 +60,7 @@ def resolve_printer(conn: cups.Connection, requested: str | None) -> str:
             sys.exit(1)
         return requested
 
-    # 2. DEFAULT_PRINTER from .env / environment
-    env_default = os.getenv("DEFAULT_PRINTER", "").strip()
-    if env_default:
-        if env_default not in available:
-            print(
-                f"Warning: DEFAULT_PRINTER='{env_default}' from .env is not available in CUPS.\n"
-                f"Available printers: {', '.join(sorted(available.keys()))}",
-                file=sys.stderr,
-            )
-            # Fall through to CUPS default
-        else:
-            return env_default
-
-    # 3. CUPS system default
+    # 2. CUPS system default
     try:
         dests = conn.getDests()
         for (name, _instance), dest in dests.items():
@@ -84,7 +69,7 @@ def resolve_printer(conn: cups.Connection, requested: str | None) -> str:
     except Exception:
         pass
 
-    # 4. First available printer
+    # 3. First available printer
     first = sorted(available.keys())[0]
     print(f"Warning: No default printer set. Using first available: '{first}'", file=sys.stderr)
     return first

@@ -10,7 +10,7 @@ Print files, web pages, and text to any CUPS printer from the command line.
 cd printer
 uv sync
 uv run playwright install chromium
-chmod +x bin/printit
+chmod +x bin/printer
 ```
 
 Requires [uv](https://docs.astral.sh/uv/getting-started/installation/) and CUPS installed and running (`lpstat -r` to verify).
@@ -23,22 +23,22 @@ See [printer/setup/SETUP.md](printer/setup/SETUP.md).
 
 ## CLI Usage
 
-All commands are invoked via `bin/printit`:
+All commands are invoked via `bin/printer`:
 
 ```bash
-bin/printit <script> [options]
+bin/printer <command> [options]
 ```
 
 ### List printers
 
 ```bash
 # JSON output (default)
-bin/printit list_printers
-bin/printit list_printers --json
+bin/printer list
+bin/printer list --json
 
 # Human-readable text table
-bin/printit list_printers --text
-bin/printit list_printers --text --verbose
+bin/printer list --text
+bin/printer list --text --verbose
 ```
 
 **JSON output format:**
@@ -69,10 +69,10 @@ With `--verbose`, each printer entry also includes an `"attributes"` object cont
 ### Print a file
 
 ```bash
-bin/printit print_file --file /path/to/document.pdf
-bin/printit print_file --file report.pdf --printer "HP_LaserJet"
-bin/printit print_file --file report.pdf --duplex
-bin/printit print_file --file report.pdf --copies 2 --media A4
+bin/printer file --file /path/to/document.pdf
+bin/printer file --file report.pdf --printer "HP_LaserJet"
+bin/printer file --file report.pdf --duplex
+bin/printer file --file report.pdf --copies 2 --media A4
 ```
 
 | Option | Description |
@@ -85,13 +85,13 @@ bin/printit print_file --file report.pdf --copies 2 --media A4
 | `--orientation` | portrait or landscape |
 | `--title` | Job title in the CUPS queue |
 
-### Print a URL
+### Print a web page
 
 ```bash
-bin/printit print_url --url https://example.com
-bin/printit print_url --url https://example.com --scale 0.8 --landscape
-bin/printit print_url --url https://example.com --wait 3
-bin/printit print_url --url https://dashboard.example.com --no-network-wait
+bin/printer page --url https://example.com
+bin/printer page --url https://example.com --scale 0.8 --landscape
+bin/printer page --url https://example.com --wait 3
+bin/printer page --url https://dashboard.example.com --no-network-wait
 ```
 
 | Option | Description |
@@ -110,10 +110,10 @@ bin/printit print_url --url https://dashboard.example.com --no-network-wait
 ### Print a text file
 
 ```bash
-bin/printit print_text --file notes.txt
-bin/printit print_text --file notes.txt --font Helvetica --font-size 11
-bin/printit print_text --file output.log --font Courier --font-size 8 --landscape
-bin/printit print_text --file report.txt --font Times-Roman --duplex
+bin/printer text --file notes.txt
+bin/printer text --file notes.txt --font Helvetica --font-size 11
+bin/printer text --file output.log --font Courier --font-size 8 --landscape
+bin/printer text --file report.txt --font Times-Roman --duplex
 ```
 
 | Option | Description |
@@ -148,7 +148,10 @@ MIT
 User
   │
   ▼
-bin/printit  ← front desk (bash launcher)
+bin/printer  ← front desk (bash launcher)
+  │
+  ▼
+scripts/main.py  ← Click CLI dispatcher
   │
   ├──► scripts/list_printers.py   ← "What printers do you have?"
   ├──► scripts/print_file.py      ← "Print this PDF/image"
@@ -164,20 +167,32 @@ bin/printit  ← front desk (bash launcher)
 
 ---
 
-### The Launcher: `bin/printit`
+### The Launcher: `bin/printer`
 
-This bash script is the **only entry point**. It does three things:
+This bash script is the **only entry point**. It delegates to the Click dispatcher:
 
 ```
-printit list_printers --verbose
+printer list --verbose
    │
    ├─ [1] Resolves SKILL_ROOT (one level above bin/)
-   ├─ [2] Validates the script name, appends .py if missing
-   ├─ [3] Checks 'uv' is on PATH
-   └─ [4] exec uv run --project SKILL_ROOT  scripts/<name>.py  [args...]
+   ├─ [2] Checks 'uv' is on PATH
+   └─ [3] exec uv run --project SKILL_ROOT  scripts/main.py  [args...]
 ```
 
 The `exec` at the end **replaces** the bash process with `uv run` — no parent bash process lingers. `set -euo pipefail` means any error aborts immediately.
+
+---
+
+### The Dispatcher: `scripts/main.py`
+
+A Click group that registers all four subcommands:
+
+```
+printer list    →  list_printers_cmd  (list_printers.py)
+printer file    →  print_file_cmd     (print_file.py)
+printer page    →  print_url_cmd      (print_url.py)
+printer text    →  print_text_cmd     (print_text.py)
+```
 
 ---
 
@@ -189,7 +204,7 @@ All four scripts share three helpers:
 
 **`resolve_printer()`** — a priority waterfall:
 ```
---printer flag  →  DEFAULT_PRINTER in .env  →  CUPS system default  →  first alphabetically
+--printer flag  →  CUPS system default  →  first alphabetically
 ```
 
 **`build_print_options()`** — translates human flags (`duplex=True`, `copies=3`) into the raw CUPS IPP dictionary CUPS expects:
@@ -209,7 +224,7 @@ The simplest path:
 ```
 resolve file path → resolve printer → build options → conn.printFile()
 ```
-Duplex defaults come from `.env`'s `DEFAULT_DUPLEX`. `--simplex` and `--duplex` are **mutually exclusive** via argparse.
+Duplex defaults come from `.env`'s `DEFAULT_DUPLEX`. `--simplex` and `--duplex` are mutually exclusive.
 
 **`print_url.py`**
 The most complex path:

@@ -33,13 +33,14 @@ Requirements:
     - CUPS must be installed and running on the system
 """
 
-import argparse
 import os
 import sys
 import tempfile
 import time
 from pathlib import Path
 from urllib.parse import urlparse
+
+import click
 
 # ── Load .env from the script's own directory ─────────────────────────────────
 _SKILL_ROOT  = Path(__file__).parent.parent.resolve()
@@ -271,153 +272,59 @@ def print_url(
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
-def main() -> None:
-    env_printer = os.getenv("DEFAULT_PRINTER", "not set")
-    env_duplex  = os.getenv("DEFAULT_DUPLEX",  "false")
+@click.command("print-url")
+@click.option("--url", "-u", required=True, metavar="URL",
+              help="Web page URL to print (e.g. https://example.com).")
+@click.option("--printer", "-p", default=None, metavar="NAME",
+              help="CUPS printer name. Run 'printer list' to see available names.")
+@click.option("--duplex", "-d", is_flag=True, default=False,
+              help="Print two-sided (duplex).")
+@click.option("--simplex", "-s", is_flag=True, default=False,
+              help="Print one-sided (simplex). Overrides DEFAULT_DUPLEX=true in .env.")
+@click.option("--copies", "-n", type=int, default=1, metavar="N",
+              help="Number of copies (default: 1).")
+@click.option("--landscape", "-l", is_flag=True, default=False,
+              help="Render and print in landscape orientation (default: portrait).")
+@click.option("--media", "-m", default="A4", metavar="SIZE",
+              help="Paper size: A4, Letter, Legal, A3, Tabloid, ... (default: A4).")
+@click.option("--scale", type=float, default=1.0, metavar="FACTOR",
+              help="CSS scale factor between 0.1 and 2.0 (default: 1.0). "
+                   "Use 0.8 to shrink wide pages to fit.")
+@click.option("--wait", "-w", "wait_seconds", type=float, default=0.0, metavar="SECONDS",
+              help="Extra seconds to wait after page load before rendering (default: 0).")
+@click.option("--network-wait/--no-network-wait", "wait_for_network", default=True,
+              help="Wait for network idle before rendering (default: enabled). "
+                   "Disable for live dashboards or pages that stream data continuously.")
+@click.option("--viewport-width", type=int, default=1280, metavar="PX",
+              help="Chromium viewport width in pixels (default: 1280).")
+@click.option("--title", "-t", default=None, metavar="TITLE",
+              help="CUPS job title shown in the print queue (default: the URL).")
+def print_url_cmd(url, printer, duplex, simplex, copies, landscape, media, scale,
+                  wait_seconds, wait_for_network, viewport_width, title) -> None:
+    """Render a web page with headless Chromium and print it via CUPS."""
+    if duplex and simplex:
+        raise click.UsageError("--duplex and --simplex are mutually exclusive")
+    if not (0.1 <= scale <= 2.0):
+        raise click.BadParameter("must be between 0.1 and 2.0", param_hint="'--scale'")
+    if copies < 1:
+        raise click.BadParameter("must be at least 1", param_hint="'--copies'")
 
-    parser = argparse.ArgumentParser(
-        description=(
-            "Render a web page with headless Chromium and print it via CUPS.\n"
-            "Supports JavaScript, CSS, and dynamic content."
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=(
-            f"Current .env defaults (from {_DOTENV_PATH}):\n"
-            f"  DEFAULT_PRINTER = {env_printer}\n"
-            f"  DEFAULT_DUPLEX  = {env_duplex}\n\n"
-            "Examples:\n"
-            "  python print_url.py --url https://example.com\n"
-            "  python print_url.py --url https://news.ycombinator.com --duplex\n"
-            "  python print_url.py --url https://example.com --printer HP_LJ --landscape\n"
-            "  python print_url.py --url https://example.com --scale 0.8 --wait 3\n"
-            "  python print_url.py --url https://example.com --no-network-wait\n"
-        ),
-    )
-
-    parser.add_argument(
-        "--url", "-u",
-        required=True,
-        metavar="URL",
-        help="Web page URL to print (e.g. https://example.com).",
-    )
-    parser.add_argument(
-        "--printer", "-p",
-        default=None,
-        metavar="NAME",
-        help="CUPS printer name. Overrides DEFAULT_PRINTER from .env.",
-    )
-
-    sides_group = parser.add_mutually_exclusive_group()
-    sides_group.add_argument(
-        "--duplex", "-d",
-        action="store_true",
-        default=None,
-        help="Print two-sided (duplex).",
-    )
-    sides_group.add_argument(
-        "--simplex", "-s",
-        action="store_true",
-        default=None,
-        help="Print one-sided (simplex). Overrides DEFAULT_DUPLEX=true in .env.",
-    )
-
-    parser.add_argument(
-        "--copies", "-n",
-        type=int,
-        default=1,
-        metavar="N",
-        help="Number of copies (default: 1).",
-    )
-    parser.add_argument(
-        "--landscape", "-l",
-        action="store_true",
-        help="Render and print in landscape orientation (default: portrait).",
-    )
-    parser.add_argument(
-        "--media", "-m",
-        default="A4",
-        metavar="SIZE",
-        help='Paper size: A4, Letter, Legal, A3, Tabloid, … (default: A4).',
-    )
-    parser.add_argument(
-        "--scale",
-        type=float,
-        default=1.0,
-        metavar="FACTOR",
-        help=(
-            "CSS scale factor for the PDF render, between 0.1 and 2.0 "
-            "(default: 1.0). Use 0.8 to shrink wide pages to fit."
-        ),
-    )
-    parser.add_argument(
-        "--wait", "-w",
-        type=float,
-        default=0.0,
-        metavar="SECONDS",
-        dest="wait_seconds",
-        help=(
-            "Extra seconds to wait after page load before rendering. "
-            "Useful for pages with delayed animations or lazy content (default: 0)."
-        ),
-    )
-    parser.add_argument(
-        "--no-network-wait",
-        action="store_false",
-        dest="wait_for_network",
-        default=True,
-        help=(
-            "Do not wait for network idle before rendering. "
-            "Use for live dashboards or pages that stream data continuously."
-        ),
-    )
-    parser.add_argument(
-        "--viewport-width",
-        type=int,
-        default=1280,
-        metavar="PX",
-        help="Chromium viewport width in pixels (default: 1280).",
-    )
-    parser.add_argument(
-        "--title", "-t",
-        default=None,
-        metavar="TITLE",
-        help="CUPS job title shown in the print queue (default: the URL).",
-    )
-
-    args = parser.parse_args()
-
-    # Validate scale
-    if not (0.1 <= args.scale <= 2.0):
-        print("Error: --scale must be between 0.1 and 2.0.", file=sys.stderr)
-        sys.exit(1)
-
-    # Validate copies
-    if args.copies < 1:
-        print("Error: --copies must be at least 1.", file=sys.stderr)
-        sys.exit(1)
-
-    # Resolve duplex flag
-    if args.simplex:
-        duplex_value: bool | None = False
-    elif args.duplex:
-        duplex_value = True
-    else:
-        duplex_value = None  # resolved from .env inside print_url()
+    duplex_value: bool | None = True if duplex else (False if simplex else None)
 
     print_url(
-        url=args.url,
-        printer_name=args.printer,
+        url=url,
+        printer_name=printer,
         duplex=duplex_value,
-        copies=args.copies,
-        landscape=args.landscape,
-        media=args.media,
-        scale=args.scale,
-        wait_seconds=args.wait_seconds,
-        wait_for_network=args.wait_for_network,
-        viewport_width=args.viewport_width,
-        title=args.title,
+        copies=copies,
+        landscape=landscape,
+        media=media,
+        scale=scale,
+        wait_seconds=wait_seconds,
+        wait_for_network=wait_for_network,
+        viewport_width=viewport_width,
+        title=title,
     )
 
 
 if __name__ == "__main__":
-    main()
+    print_url_cmd()

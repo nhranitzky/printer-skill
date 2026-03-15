@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# printer – Printer Skill CLI launcher
+# -------------------------------------
+# Invokes the Click CLI dispatcher (scripts/main.py) via uv run,
+# forwarding all arguments.
+#
+# Usage:
+#   printer <command> [args...]
+#   printer --help
+#   printer <command> --help
+#
+# Commands:
+#   list   Discover and list CUPS printers
+#   file   Print a local file via CUPS
+#   page   Render a web page and print it via CUPS
+#   text   Convert a text file to PDF and print via CUPS
+#
+# Run "uv sync" once in the skill root to install all dependencies.
+# "uv" must be on PATH (https://github.com/astral-sh/uv).
+
+set -euo pipefail
+
+# ── Resolve skill root (one level above this script's directory) ──────────────
+SKILL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# ── Check uv is available ─────────────────────────────────────────────────────
+if ! command -v uv &>/dev/null; then
+    echo "Error: 'uv' is not installed or not on PATH." >&2
+    echo "Install it with: curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+    exit 1
+fi
+
+# ── Dispatch to the Click CLI ─────────────────────────────────────────────────
+exec uv run \
+    --project "${SKILL_ROOT}" \
+    --directory "${SKILL_ROOT}" \
+    "${SKILL_ROOT}/scripts/main.py" \
+    "$@"

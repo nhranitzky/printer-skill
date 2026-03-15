@@ -32,7 +32,7 @@ echo ""
 echo "==> Installing dependencies..."
 uv sync --no-dev --project "$SKILL_ROOT"
 uv run --project "$SKILL_ROOT" playwright install chromium
-chmod +x "$SKILL_ROOT/bin/printit"
+chmod +x "$SKILL_ROOT/bin/printer"
 echo "    Done."
 
 

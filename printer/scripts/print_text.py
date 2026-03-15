@@ -34,12 +34,13 @@ Requirements:
     - CUPS must be installed and running on the system
 """
 
-import argparse
 import os
 import re
 import sys
 import tempfile
 from pathlib import Path
+
+import click
 
 # ── Load .env from the skill root (one level above scripts/) ──────────────────
 _SKILL_ROOT  = Path(__file__).parent.parent.resolve()
@@ -350,96 +351,64 @@ def print_text(
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
-def main() -> None:
-    env_printer = os.getenv("DEFAULT_PRINTER", "not set")
-    env_duplex  = os.getenv("DEFAULT_DUPLEX",  "false")
+@click.command("print-text")
+@click.option("--file", "-f", required=True, metavar="PATH",
+              help="Path to the plain text file to print.")
+@click.option("--printer", "-p", default=None, metavar="NAME",
+              help="CUPS printer name. Run 'printer list' to see available names.")
+@click.option("--duplex", "-d", is_flag=True, default=False,
+              help="Print two-sided (duplex).")
+@click.option("--simplex", "-s", is_flag=True, default=False,
+              help="Print one-sided (simplex). Overrides DEFAULT_DUPLEX=true.")
+@click.option("--copies", "-n", type=int, default=1, metavar="N",
+              help="Number of copies (default: 1).")
+@click.option("--font", default="Courier", metavar="NAME",
+              help="ReportLab font name (default: Courier). "
+                   "Options: Courier, Helvetica, Times-Roman (plus Bold/Italic variants).")
+@click.option("--font-size", type=float, default=10.0, metavar="PT",
+              help="Font size in points (default: 10).")
+@click.option("--line-spacing", type=float, default=1.2, metavar="FACTOR",
+              help="Line height multiplier: 1.0=tight, 1.2=normal, 1.5=loose (default: 1.2).")
+@click.option("--media", "-m", default="A4",
+              type=click.Choice(list(PAPER_SIZES.keys())),
+              help="Paper size (default: A4).")
+@click.option("--landscape", "-l", is_flag=True, default=False,
+              help="Print in landscape orientation.")
+@click.option("--margin", default="2cm", metavar="VALUE",
+              help="Page margin, e.g. '2cm', '15mm', '72pt' (default: 2cm).")
+@click.option("--encoding", default="utf-8", metavar="ENC",
+              help="Source file character encoding (default: utf-8).")
+@click.option("--title", "-t", default=None, metavar="TITLE",
+              help="CUPS job title (default: filename).")
+def print_text_cmd(file, printer, duplex, simplex, copies, font, font_size, line_spacing,
+                   media, landscape, margin, encoding, title) -> None:
+    """Convert a plain text file to PDF with a chosen font and print it via CUPS."""
+    if duplex and simplex:
+        raise click.UsageError("--duplex and --simplex are mutually exclusive")
+    if font_size <= 0:
+        raise click.BadParameter("must be greater than 0", param_hint="'--font-size'")
+    if line_spacing <= 0:
+        raise click.BadParameter("must be greater than 0", param_hint="'--line-spacing'")
+    if copies < 1:
+        raise click.BadParameter("must be at least 1", param_hint="'--copies'")
 
-    parser = argparse.ArgumentParser(
-        description=(
-            "Convert a plain text file to PDF with a chosen font and print it via CUPS."
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=(
-            f"Current .env defaults (from {_DOTENV_PATH}):\n"
-            f"  DEFAULT_PRINTER = {env_printer}\n"
-            f"  DEFAULT_DUPLEX  = {env_duplex}\n\n"
-            "Available built-in fonts:\n"
-            "  Courier, Courier-Bold, Courier-Oblique, Courier-BoldOblique\n"
-            "  Helvetica, Helvetica-Bold, Helvetica-Oblique, Helvetica-BoldOblique\n"
-            "  Times-Roman, Times-Bold, Times-Italic, Times-BoldItalic\n\n"
-            "Examples:\n"
-            "  python print_text.py --file notes.txt\n"
-            "  python print_text.py --file notes.txt --font Helvetica --font-size 11\n"
-            "  python print_text.py --file log.txt --font Courier --font-size 8 --landscape\n"
-            "  python print_text.py --file readme.txt --line-spacing 1.5 --margin 2.5cm\n"
-        ),
-    )
-
-    parser.add_argument("--file",    "-f", required=True, metavar="PATH",
-                        help="Path to the plain text file to print.")
-    parser.add_argument("--printer", "-p", default=None, metavar="NAME",
-                        help="CUPS printer name. Overrides DEFAULT_PRINTER from .env.")
-
-    sides = parser.add_mutually_exclusive_group()
-    sides.add_argument("--duplex",  "-d", action="store_true", default=None,
-                       help="Print two-sided (duplex).")
-    sides.add_argument("--simplex", "-s", action="store_true", default=None,
-                       help="Print one-sided (simplex). Overrides DEFAULT_DUPLEX=true.")
-
-    parser.add_argument("--copies", "-n", type=int, default=1, metavar="N",
-                        help="Number of copies (default: 1).")
-    parser.add_argument("--font", default="Courier", metavar="NAME",
-                        help="ReportLab font name (default: Courier). See --help for list.")
-    parser.add_argument("--font-size", type=float, default=10.0, metavar="PT",
-                        help="Font size in points (default: 10).")
-    parser.add_argument("--line-spacing", type=float, default=1.2, metavar="FACTOR",
-                        help="Line height multiplier: 1.0=tight, 1.2=normal, 1.5=loose (default: 1.2).")
-    parser.add_argument("--media", "-m", default="A4",
-                        choices=list(PAPER_SIZES.keys()),
-                        help="Paper size (default: A4).")
-    parser.add_argument("--landscape", "-l", action="store_true",
-                        help="Print in landscape orientation.")
-    parser.add_argument("--margin", default="2cm", metavar="VALUE",
-                        help="Page margin, e.g. '2cm', '15mm', '72pt' (default: 2cm).")
-    parser.add_argument("--encoding", default="utf-8", metavar="ENC",
-                        help="Source file character encoding (default: utf-8).")
-    parser.add_argument("--title", "-t", default=None, metavar="TITLE",
-                        help="CUPS job title (default: filename).")
-
-    args = parser.parse_args()
-
-    if args.font_size <= 0:
-        print("Error: --font-size must be greater than 0.", file=sys.stderr)
-        sys.exit(1)
-    if args.line_spacing <= 0:
-        print("Error: --line-spacing must be greater than 0.", file=sys.stderr)
-        sys.exit(1)
-    if args.copies < 1:
-        print("Error: --copies must be at least 1.", file=sys.stderr)
-        sys.exit(1)
-
-    if args.simplex:
-        duplex_value: bool | None = False
-    elif args.duplex:
-        duplex_value = True
-    else:
-        duplex_value = None
+    duplex_value: bool | None = True if duplex else (False if simplex else None)
 
     print_text(
-        file_path=args.file,
-        printer_name=args.printer,
+        file_path=file,
+        printer_name=printer,
         duplex=duplex_value,
-        copies=args.copies,
-        font=args.font,
-        font_size=args.font_size,
-        line_spacing=args.line_spacing,
-        media=args.media,
-        landscape=args.landscape,
-        margin_str=args.margin,
-        encoding=args.encoding,
-        title=args.title,
+        copies=copies,
+        font=font,
+        font_size=font_size,
+        line_spacing=line_spacing,
+        media=media,
+        landscape=landscape,
+        margin_str=margin,
+        encoding=encoding,
+        title=title,
     )
 
 
 if __name__ == "__main__":
-    main()
+    print_text_cmd()
