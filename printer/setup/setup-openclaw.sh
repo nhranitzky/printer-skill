@@ -40,7 +40,8 @@ echo "    Done."
 # ---------------------------------------------------------------------------
 
 echo ""
-if ask "==> Add bin/printit to the Openclaw approvals allowlist?"; then
+read -rp "==> Add bin/printer to the Openclaw approvals allowlist? [y/N] " REPLY
+if [[ "${REPLY,,}" == "y" ]]; then
 
     echo ""
     echo "    For which agent should the allowlist entry apply?"
